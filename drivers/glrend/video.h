@@ -19,6 +19,10 @@ typedef struct _VIDEO {
     GLint maxSamples;
     GLfloat maxAnisotropy;
 
+    /* Presentation settings from the application, see br_device_gl_callback_procs */
+    int scaleFilter;
+    int textureFilter;
+
     struct {
         GLuint program;
         GLint aPosition;     /* Position, vec3 */
@@ -28,6 +32,9 @@ typedef struct _VIDEO {
         GLint uMVP;          /* Model-View-Projection Matrix, mat4 */
         GLint uFlipVertically;
         GLint uDiscardPurplePixels;
+        GLint uScaleMode;    /* 0 nearest, 1 sharp bilinear, 2 bilinear */
+        GLint uTexSize;      /* Size of the 2D layer in pixels, vec2 */
+        GLint uScale;        /* Window pixels per 2D layer pixel, vec2 */
     } defaultProgram;
 
     struct {

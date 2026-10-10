@@ -29,6 +29,20 @@ typedef struct br_device_gl_callback_procs {
     br_device_gl_getviewport_cbfn         *get_viewport;
     br_device_gl_swapbuffers_cbfn         *swap_buffers;
     br_device_gl_free_cbfn                *free;
+
+    /*
+     * Presentation settings, chosen by the application. Zero, which is what an
+     * application that does not set them gets, is the original behaviour.
+     *
+     * scale_filter, for the 2D layer (menus, HUD, text, videos) stretched over
+     * the window: 0 nearest, 1 sharp bilinear (crisp pixels with smooth edges
+     * between them), 2 bilinear.
+     *
+     * texture_filter, for 3D textures that are not colour-keyed: 0 as each
+     * material asks, 1 smooth (bilinear with mipmaps), 2 smooth and anisotropic.
+     */
+    int                                    scale_filter;
+    int                                    texture_filter;
 } br_device_gl_callback_procs;
 
 #endif

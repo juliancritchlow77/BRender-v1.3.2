@@ -265,6 +265,14 @@ static void apply_stored_properties(HVIDEO hVideo, state_stack* state, uint32_t 
             assert(0);
         }
 
+        // Application override. Colour-keyed textures (fences, trees, wire) keep
+        // their hard edges, since smoothing would blend the key colour into them.
+        if (hVideo->textureFilter != 0 && state->prim.colour_map != NULL && !(state->prim.flags & PRIMF_COLOUR_KEY)) {
+            minFilter = GL_LINEAR_MIPMAP_LINEAR;
+            magFilter = GL_LINEAR;
+            maxAnisotropy = hVideo->textureFilter >= 2 ? hVideo->maxAnisotropy : 1.0f;
+        }
+
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (GLint)minFilter);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (GLint)magFilter);
 

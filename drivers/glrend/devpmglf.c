@@ -138,7 +138,18 @@ void RenderFullScreenTextureToFrameBuffer(br_device_pixelmap* self, GLuint textu
     glUseProgram(self->asFront.video.defaultProgram.program);
     glUniform1f(self->asFront.video.defaultProgram.uFlipVertically, (float)flipVertically);
     glUniform1i(self->asFront.video.defaultProgram.uDiscardPurplePixels, discardPurplePixels);
+    glUniform1i(self->asFront.video.defaultProgram.uScaleMode, self->asFront.video.scaleFilter);
+    glUniform2f(self->asFront.video.defaultProgram.uTexSize, (float)self->pm_width, (float)self->pm_height);
+    glUniform2f(self->asFront.video.defaultProgram.uScale, width_m, height_m);
+    if (self->asFront.video.scaleFilter != 0) {
+        // The shader gives smoothed edges an alpha, premultiplied
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    if (self->asFront.video.scaleFilter != 0) {
+        glDisable(GL_BLEND);
+    }
 
     glBindVertexArray(0);
     glEnable(GL_DEPTH_TEST);
@@ -236,6 +247,8 @@ br_device_pixelmap* DevicePixelmapGLAllocateFront(br_device* dev, br_output_faci
         BrResFree(self);
         return NULL;
     }
+    self->asFront.video.scaleFilter = self->asFront.callbacks.scale_filter;
+    self->asFront.video.textureFilter = self->asFront.callbacks.texture_filter;
     self->asFront.tex_white = DeviceGLBuildWhiteTexture();
     self->asFront.tex_checkerboard = DeviceGLBuildCheckerboardTexture();
 
