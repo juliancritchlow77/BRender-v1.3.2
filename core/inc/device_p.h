@@ -43,6 +43,16 @@ typedef struct br_device_gl_callback_procs {
      */
     int                                    scale_filter;
     int                                    texture_filter;
+
+    /*
+     * Texture dumping and replacement, for trying upscaled textures. Both are
+     * folders of 32 bit TGA files named <texture>_<width>x<height>.tga, or NULL.
+     * texture_dump_dir: each 8 bit texture is written there as it is first used
+     * (alpha 0 where the colour key index is). texture_pack_dir: a file there
+     * with a texture's name and original size replaces it, at any larger size.
+     */
+    const char*                            texture_dump_dir;
+    const char*                            texture_pack_dir;
 } br_device_gl_callback_procs;
 
 #endif

@@ -75,6 +75,9 @@ struct br_buffer_stored* BufferStoredGLAllocate(br_renderer* renderer, br_token 
     self->device = ObjectDevice(renderer);
     self->renderer = renderer;
     self->gl_tex = 0;
+    self->replacement = NULL;
+    self->replacement_w = self->replacement_h = 0;
+    self->replacement_tried = BR_FALSE;
     self->templates = BrTVTemplateAllocate(self, (br_tv_template_entry*)bufferStoredTemplateEntries,
         BR_ASIZE(bufferStoredTemplateEntries));
 

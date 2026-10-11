@@ -3,6 +3,9 @@
  */
 #include "brassert.h"
 #include "drv.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void apply_blend_mode(state_stack* self) {
@@ -109,8 +112,149 @@ static void apply_depth_properties(state_stack* state, uint32_t states) {
     GL_CHECK_ERROR();
 }
 
-// take a pixelmap and palette and convert 8 bit to 32 bit just in time
-static void update_paletted_texture(br_pixelmap *src, br_uint_32 *palette) {
+/*
+ * Texture dump and texture pack support, for trying upscaled textures. Files
+ * are uncompressed 32 bit TGA, named <texture>_<width>x<height>.tga after the
+ * texture's name and its original size.
+ */
+static void texpack_path(char* out, size_t size, const char* dir, const char* ident, int w, int h) {
+    size_t n = 0;
+    const char* c;
+
+    n = (size_t)snprintf(out, size, "%s/", dir);
+    for (c = ident != NULL ? ident : "unnamed"; *c != '\0' && n + 32 < size; c++) {
+        out[n++] = (isalnum((unsigned char)*c) || *c == '-') ? *c : '_';
+    }
+    snprintf(out + n, size - n, "_%dx%d.tga", w, h);
+}
+
+static void texpack_dump(HVIDEO hVideo, br_pixelmap* src, const br_uint_32* palette) {
+    char path[512];
+    FILE* f;
+    uint8_t header[18] = { 0 };
+    uint8_t* row;
+    int x, y;
+
+    texpack_path(path, sizeof(path), hVideo->textureDumpDir, src->identifier, src->width, src->height);
+    f = fopen(path, "rb");
+    if (f != NULL) {
+        fclose(f);
+        return;
+    }
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        return;
+    }
+    header[2] = 2;
+    header[12] = src->width & 0xff;
+    header[13] = src->width >> 8;
+    header[14] = src->height & 0xff;
+    header[15] = src->height >> 8;
+    header[16] = 32;
+    header[17] = 0x28; /* top left origin, 8 bits of alpha */
+    fwrite(header, 1, sizeof(header), f);
+    row = (uint8_t*)malloc((size_t)src->width * 4);
+    if (row != NULL) {
+        for (y = 0; y < src->height; y++) {
+            for (x = 0; x < src->width; x++) {
+                int index = ((br_uint_8*)src->pixels)[y * src->row_bytes + x];
+                br_uint_32 c = palette[index];
+                row[x * 4 + 0] = BR_BLU(c);
+                row[x * 4 + 1] = BR_GRN(c);
+                row[x * 4 + 2] = BR_RED(c);
+                row[x * 4 + 3] = index == 0 ? 0 : 255;
+            }
+            fwrite(row, 1, (size_t)src->width * 4, f);
+        }
+        free(row);
+    }
+    fclose(f);
+}
+
+/* Reads a 24 or 32 bit uncompressed TGA as RGBA bytes. Returns NULL if it isn't one. */
+static br_uint_32* texpack_load(const char* path, int* out_w, int* out_h) {
+    FILE* f = fopen(path, "rb");
+    uint8_t header[18];
+    int w, h, bpp, x, y;
+    uint8_t* raw;
+    uint8_t* out;
+
+    if (f == NULL) {
+        return NULL;
+    }
+    if (fread(header, 1, sizeof(header), f) != sizeof(header) || header[2] != 2 || (header[16] != 32 && header[16] != 24)) {
+        fclose(f);
+        return NULL;
+    }
+    w = header[12] | (header[13] << 8);
+    h = header[14] | (header[15] << 8);
+    bpp = header[16] / 8;
+    if (w <= 0 || h <= 0 || w > 8192 || h > 8192) {
+        fclose(f);
+        return NULL;
+    }
+    fseek(f, header[0], SEEK_CUR);
+    raw = (uint8_t*)malloc((size_t)w * h * bpp);
+    out = (uint8_t*)malloc((size_t)w * h * 4);
+    if (raw == NULL || out == NULL || fread(raw, bpp, (size_t)w * h, f) != (size_t)w * h) {
+        free(raw);
+        free(out);
+        fclose(f);
+        return NULL;
+    }
+    fclose(f);
+    for (y = 0; y < h; y++) {
+        int sy = (header[17] & 0x20) ? y : h - 1 - y;
+        for (x = 0; x < w; x++) {
+            const uint8_t* s = raw + ((size_t)sy * w + x) * bpp;
+            uint8_t* d = out + ((size_t)y * w + x) * 4;
+            uint8_t a = bpp == 4 ? s[3] : 255;
+            /*
+             * Colour-keyed textures are drawn by discarding black, so a see-through
+             * pixel becomes black and a solid one is kept from being exactly black.
+             */
+            if (a < 128) {
+                d[0] = d[1] = d[2] = 0;
+            } else {
+                d[0] = s[2];
+                d[1] = s[1];
+                d[2] = s[0];
+                if (d[0] == 0 && d[1] == 0 && d[2] == 0) {
+                    d[0] = d[1] = d[2] = 1;
+                }
+            }
+            d[3] = 255;
+        }
+    }
+    free(raw);
+    *out_w = w;
+    *out_h = h;
+    return (br_uint_32*)out;
+}
+
+/*
+ * Take a pixelmap and palette and convert 8 bit to 32 bit just in time, or, if
+ * the texture pack has a replacement for it, use that.
+ */
+static void update_paletted_texture(HVIDEO hVideo, br_buffer_stored* tex, br_uint_32 *palette) {
+    br_pixelmap* src = tex->source;
+
+    if (hVideo->textureDumpDir != NULL) {
+        texpack_dump(hVideo, src, palette);
+    }
+    if (hVideo->texturePackDir != NULL && !tex->replacement_tried) {
+        char path[512];
+        tex->replacement_tried = BR_TRUE;
+        texpack_path(path, sizeof(path), hVideo->texturePackDir, src->identifier, src->width, src->height);
+        tex->replacement = texpack_load(path, &tex->replacement_w, &tex->replacement_h);
+    }
+    if (tex->replacement != NULL) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex->replacement_w, tex->replacement_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex->replacement);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        GL_CHECK_ERROR();
+        return;
+    }
+
     uint32_t* buffer = BrScratchAllocate(sizeof(uint32_t) * src->width * src->height);
     uint32_t* buffer_ptr = buffer;
     br_uint_8* src_px = src->pixels;
@@ -219,13 +363,13 @@ static void apply_stored_properties(HVIDEO hVideo, state_stack* state, uint32_t 
 
             // has the 8 bit color source changed?
             if (state->prim.colour_map->paletted_source_dirty == BR_TRUE) {
-                update_paletted_texture(state->prim.colour_map->source, state->prim.colour_map->palette_pointer->entries);
+                update_paletted_texture(hVideo, state->prim.colour_map, state->prim.colour_map->palette_pointer->entries);
                 state->prim.colour_map->paletted_source_dirty = BR_FALSE;
                 state->prim.colour_map->palette_revision = state->prim.colour_map->palette_pointer->revision;
             }
             // or has the palette changed?
             else if (state->prim.colour_map->palette_pointer != NULL && state->prim.colour_map->palette_revision != state->prim.colour_map->palette_pointer->revision) {
-                update_paletted_texture(state->prim.colour_map->source, state->prim.colour_map->palette_pointer->entries);
+                update_paletted_texture(hVideo, state->prim.colour_map, state->prim.colour_map->palette_pointer->entries);
                 state->prim.colour_map->palette_revision = state->prim.colour_map->palette_pointer->revision;
             }
 

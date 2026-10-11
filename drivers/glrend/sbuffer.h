@@ -59,6 +59,15 @@ typedef struct br_buffer_stored {
     br_uint_32 palette_revision;
     struct br_device_clut *palette_pointer;
 
+    /*
+     * A replacement for the 8 bit texture from the application's texture
+     * pack (RGBA, with alpha 0 where the key colour was), if there is one.
+     * replacement_tried is set once the pack has been looked in.
+     */
+    br_uint_32 *replacement;
+    int replacement_w, replacement_h;
+    br_boolean replacement_tried;
+
 } br_buffer_stored;
 
 #endif

@@ -249,6 +249,8 @@ br_device_pixelmap* DevicePixelmapGLAllocateFront(br_device* dev, br_output_faci
     }
     self->asFront.video.scaleFilter = self->asFront.callbacks.scale_filter;
     self->asFront.video.textureFilter = self->asFront.callbacks.texture_filter;
+    self->asFront.video.textureDumpDir = self->asFront.callbacks.texture_dump_dir;
+    self->asFront.video.texturePackDir = self->asFront.callbacks.texture_pack_dir;
     self->asFront.tex_white = DeviceGLBuildWhiteTexture();
     self->asFront.tex_checkerboard = DeviceGLBuildCheckerboardTexture();
 

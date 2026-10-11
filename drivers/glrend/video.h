@@ -22,6 +22,8 @@ typedef struct _VIDEO {
     /* Presentation settings from the application, see br_device_gl_callback_procs */
     int scaleFilter;
     int textureFilter;
+    const char* textureDumpDir;
+    const char* texturePackDir;
 
     struct {
         GLuint program;
