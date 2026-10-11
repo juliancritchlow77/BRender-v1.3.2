@@ -67,6 +67,7 @@ typedef struct br_buffer_stored {
     br_uint_32 *replacement;
     int replacement_w, replacement_h;
     br_boolean replacement_tried;
+    br_uint_32 replacement_hash; /* of the 8 bit pixels it replaced: if they change, the texture is animated */
 
 } br_buffer_stored;
 

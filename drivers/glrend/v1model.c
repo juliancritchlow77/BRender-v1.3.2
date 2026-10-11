@@ -232,6 +232,19 @@ static br_uint_32* texpack_load(const char* path, int* out_w, int* out_h) {
     return (br_uint_32*)out;
 }
 
+static br_uint_32 texpack_hash(br_pixelmap* src) {
+    br_uint_32 h = 2166136261u;
+    int x, y;
+
+    for (y = 0; y < src->height; y++) {
+        const br_uint_8* row = (const br_uint_8*)src->pixels + y * src->row_bytes;
+        for (x = 0; x < src->width; x++) {
+            h = (h ^ row[x]) * 16777619u;
+        }
+    }
+    return h;
+}
+
 /*
  * Take a pixelmap and palette and convert 8 bit to 32 bit just in time, or, if
  * the texture pack has a replacement for it, use that.
@@ -247,6 +260,16 @@ static void update_paletted_texture(HVIDEO hVideo, br_buffer_stored* tex, br_uin
         tex->replacement_tried = BR_TRUE;
         texpack_path(path, sizeof(path), hVideo->texturePackDir, src->identifier, src->width, src->height);
         tex->replacement = texpack_load(path, &tex->replacement_w, &tex->replacement_h);
+        tex->replacement_hash = texpack_hash(src);
+    } else if (tex->replacement != NULL && texpack_hash(src) != tex->replacement_hash) {
+        /*
+         * The game has drawn into the texture since: it is animated (the rear
+         * view camera, a video), so a fixed picture would freeze it.
+         */
+        free(tex->replacement);
+        tex->replacement = NULL;
+        /* the texture is now the replacement's size: go back to the game's */
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, src->width, src->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     }
     if (tex->replacement != NULL) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex->replacement_w, tex->replacement_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex->replacement);
